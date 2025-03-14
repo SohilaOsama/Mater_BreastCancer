@@ -10,11 +10,8 @@ import tensorflow as tf
 from tensorflow.keras import layers
 import py3Dmol
 import plotly.express as px
-import math
 
 # Constants
-R_KJ = 8.314  # J/(mol·K) for kJ/mol output
-R_KCAL = 0.001987  # kcal/(mol·K) for kcal/mol output
 TEMPERATURE = 298  # Kelvin
 
 # Define Neural Network
@@ -148,15 +145,35 @@ def predict_pic50(smiles):
         return None, None
 
 # Function to calculate binding score ΔG
-def calculate_binding_score(Kd=None, Ki=None, output_unit='kJ/mol'):
-    R = R_KJ if output_unit == 'kJ/mol' else R_KCAL
-    if Kd is not None:
-        binding_score = R * TEMPERATURE * math.log(Kd)
-    elif Ki is not None:
-        binding_score = R * TEMPERATURE * math.log(Ki)
-    else:
-        return None
-    return binding_score
+def calculate_binding_score(pKi=None, pKd=None, temperature=298):
+    """
+    Calculate binding free energy (ΔG) and binding score from pKi or pKd.
+    
+    Parameters:
+    - pKi: float (if available)
+    - pKd: float (if available)
+    - temperature: int (Temperature in Kelvin, default 298K)
+    
+    Returns:
+    - ΔG (binding free energy) in kJ/mol
+    - Binding Score (-ΔG)
+    """
+    # Universal gas constant in kJ/mol·K
+    R = 0.008314  
+
+    results = {}
+
+    if pKi is not None:
+        Ki = 10**(-pKi)  # Convert pKi to Ki (M)
+        delta_G_Ki = R * temperature * np.log(Ki)
+        results['pKi'] = (round(delta_G_Ki, 2), round(-delta_G_Ki, 2))
+
+    if pKd is not None:
+        Kd = 10**(-pKd)  # Convert pKd to Kd (M)
+        delta_G_Kd = R * temperature * np.log(Kd)
+        results['pKd'] = (round(delta_G_Kd, 2), round(-delta_G_Kd, 2))
+
+    return results
 
 # Streamlit UI
 st.set_page_config(page_title="Molecular Property Prediction", page_icon="🧪", layout="centered")
@@ -228,25 +245,27 @@ if st.button("Predict"):
         
         if predicted_pki is not None:
             predicted_ki = 10**(-predicted_pki)
-            binding_score_ki = calculate_binding_score(Ki=predicted_ki, output_unit='kJ/mol')
+            binding_scores_ki = calculate_binding_score(pKi=predicted_pki, temperature=TEMPERATURE)
             st.markdown(f"""
                 <div class="result-card">
                     <h3>pKi Prediction</h3>
                     <p><strong>Predicted pKi value:</strong> {predicted_pki:.4f}</p>
                     <p><strong>Converted Ki value:</strong> {predicted_ki:.4e} M</p>
-                    <p><strong>Binding Score (ΔG):</strong> {binding_score_ki:.4f} kJ/mol</p>
+                    <p><strong>Binding Score (ΔG):</strong> {binding_scores_ki['pKi'][0]:.2f} kJ/mol</p>
+                    <p><strong>Binding Score (-ΔG):</strong> {binding_scores_ki['pKi'][1]:.2f} kJ/mol</p>
                 </div>
             """, unsafe_allow_html=True)
         
         if predicted_pkd is not None:
             predicted_kd = 10**(-predicted_pkd)
-            binding_score_kd = calculate_binding_score(Kd=predicted_kd, output_unit='kJ/mol')
+            binding_scores_kd = calculate_binding_score(pKd=predicted_pkd, temperature=TEMPERATURE)
             st.markdown(f"""
                 <div class="result-card">
                     <h3>pKd Prediction</h3>
                     <p><strong>Predicted pKd value:</strong> {predicted_pkd:.4f}</p>
                     <p><strong>Converted Kd value:</strong> {predicted_kd:.4e} M</p>
-                    <p><strong>Binding Score (ΔG):</strong> {binding_score_kd:.4f} kJ/mol</p>
+                    <p><strong>Binding Score (ΔG):</strong> {binding_scores_kd['pKd'][0]:.2f} kJ/mol</p>
+                    <p><strong>Binding Score (-ΔG):</strong> {binding_scores_kd['pKd'][1]:.2f} kJ/mol</p>
                 </div>
             """, unsafe_allow_html=True)
         
