@@ -12,3 +12,4 @@ pillow
 scikit-learn
 xgboost
 torch
+plotly
