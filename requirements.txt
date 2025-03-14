@@ -1,0 +1,13 @@
+streamlit
+pandas
+joblib
+rdkit
+tensorflow
+keras
+chardet
+py3Dmol
+streamlit-ketcher
+# rdkit-pypi
+pillow  
+scikit-learn
+xgboost
