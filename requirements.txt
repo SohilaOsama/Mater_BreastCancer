@@ -11,3 +11,4 @@ streamlit-ketcher
 pillow  
 scikit-learn
 xgboost
+torch
