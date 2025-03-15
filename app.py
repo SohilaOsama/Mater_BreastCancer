@@ -50,35 +50,55 @@ class MolecularNN(nn.Module):
 def mse(y_true, y_pred):
     return tf.reduce_mean(tf.square(y_true - y_pred))
 
-# Load the scaler and model for pKd
-scaler_pkd = joblib.load("kdscaler.joblib")
-rf_model_pkd = joblib.load("kdoptimized_rf_model.joblib")
-selected_indices = np.load("selected_feature_indices.npy")
-NUMBER_OF_FEATURES_PKD = scaler_pkd.n_features_in_
+@st.cache_resource
+def load_scaler_pkd():
+    return joblib.load("kdscaler.joblib")
 
-# Load the neural network model for pKi
-scaler_pki = joblib.load("scaler.joblib")
-NUMBER_OF_FEATURES_PKI = scaler_pki.n_features_in_
+@st.cache_resource
+def load_rf_model_pkd():
+    return joblib.load("kdoptimized_rf_model.joblib")
 
-model_pki = MolecularNN(input_dim=NUMBER_OF_FEATURES_PKI)
+@st.cache_resource
+def load_selected_indices():
+    return np.load("selected_feature_indices.npy")
 
-# Ensure the model loads on the correct device
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_pki.load_state_dict(torch.load("best_molecular_nn.pth", map_location=device))
-model_pki.eval()
+@st.cache_resource
+def load_scaler_pki():
+    return joblib.load("scaler.joblib")
 
-# Load the model, scaler, and selected features for pIC50 predictions
-pic50_scaler = joblib.load("scaler.pkl")
-pic50_model = tf.keras.models.load_model("multi_tasking_model.keras", custom_objects={"mse": mse})
-# Load the feature names directly
-pic50_features = joblib.load("selected_features.pkl")
+@st.cache_resource
+def load_model_pki():
+    model = MolecularNN(input_dim=load_scaler_pki().n_features_in_)
+    model.load_state_dict(torch.load("best_molecular_nn.pth", map_location=torch.device("cuda" if torch.cuda.is_available() else "cpu")))
+    model.eval()
+    return model
 
-# Load the model, scaler, and feature names for EC50 predictions
-ec50_model = joblib.load("EC50_pEC50_predictor.pkl")
-ec50_scaler = joblib.load("EC50_scaler.pkl")
-ec50_features = joblib.load("EC50_features.pkl")
+@st.cache_resource
+def load_pic50_scaler():
+    return joblib.load("scaler.pkl")
+
+@st.cache_resource
+def load_pic50_model():
+    return tf.keras.models.load_model("multi_tasking_model.keras", custom_objects={"mse": mse})
+
+@st.cache_resource
+def load_pic50_features():
+    return joblib.load("selected_features.pkl")
+
+@st.cache_resource
+def load_ec50_model():
+    return joblib.load("EC50_pEC50_predictor.pkl")
+
+@st.cache_resource
+def load_ec50_scaler():
+    return joblib.load("EC50_scaler.pkl")
+
+@st.cache_resource
+def load_ec50_features():
+    return joblib.load("EC50_features.pkl")
 
 # Function to convert SMILES to molecular descriptors
+@st.cache_data
 def smiles_to_descriptors(smiles, num_features):
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
@@ -106,31 +126,31 @@ def generate_3d_view(smiles):
 
 # Define a function for making predictions
 def predict_pki(smiles):
-    descriptors = smiles_to_descriptors(smiles, NUMBER_OF_FEATURES_PKI)
+    descriptors = smiles_to_descriptors(smiles, load_scaler_pki().n_features_in_)
     if descriptors is None:
         return None
-    descriptors_scaled = scaler_pki.transform([descriptors])
-    input_tensor = torch.tensor(descriptors_scaled, dtype=torch.float32).to(device)
+    descriptors_scaled = load_scaler_pki().transform([descriptors])
+    input_tensor = torch.tensor(descriptors_scaled, dtype=torch.float32).to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     with torch.no_grad():
-        prediction = model_pki(input_tensor).item()
+        prediction = load_model_pki()(input_tensor).item()
     return prediction
 
 def predict_pkd(smiles):
     descriptors = smiles_to_descriptors(smiles, 1209)
     if descriptors is None:
         return None
-    descriptors_scaled = scaler_pkd.transform([descriptors])
-    descriptors_selected = descriptors_scaled[:, selected_indices]
-    prediction = rf_model_pkd.predict(descriptors_selected)[0]
+    descriptors_scaled = load_scaler_pkd().transform([descriptors])
+    descriptors_selected = descriptors_scaled[:, load_selected_indices()]
+    prediction = load_rf_model_pkd().predict(descriptors_selected)[0]
     return prediction
 
 def predict_ec50(smiles):
     descriptors = smiles_to_descriptors(smiles, 1163)
     if descriptors is None:
         return None
-    descriptors_df = pd.DataFrame([descriptors], columns=ec50_features)
-    descriptors_scaled = ec50_scaler.transform(descriptors_df)
-    prediction = ec50_model.predict(descriptors_scaled)[0]
+    descriptors_df = pd.DataFrame([descriptors], columns=load_ec50_features())
+    descriptors_scaled = load_ec50_scaler().transform(descriptors_df)
+    prediction = load_ec50_model().predict(descriptors_scaled)[0]
     return prediction
 
 def predict_pic50(smiles):
